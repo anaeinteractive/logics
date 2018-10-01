@@ -1,0 +1,24 @@
+{
+  "name": "logics",
+  "version": "0.0.1-pre",
+  "description": "state management made easy",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/anaeinteractive/logics.git"
+  },
+  "keywords": [
+    "logics",
+    "redux",
+    "state",
+    "management"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/anaeinteractive/logics/issues"
+  },
+  "homepage": "https://github.com/anaeinteractive/logics#readme"
+}
