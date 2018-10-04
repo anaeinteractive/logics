@@ -1,0 +1,5 @@
+{
+    "name": "logics-react",
+    "main": "../lib/react.js",
+    "types": "../lib/react.d.ts"
+}
