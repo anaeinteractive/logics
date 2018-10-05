@@ -88,16 +88,3 @@ class LogicsWrapper extends React.Component<LogicsWrapperProps> {
         this.props.dropLogic();
     }
 }
-
-// if (isStateless) {
-//     return Component(enhancedProps);
-// } else {
-//     if (!Object.getOwnPropertyDescriptor(Component.prototype, 'actions')) {
-//         Object.defineProperty(Component.prototype, 'actions', {
-//             get: function actions () {
-//                 return this.props.actions
-//             }
-//         });
-//     }
-//     return createElement(Component, enhancedProps);
-// }
