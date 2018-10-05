@@ -37,7 +37,7 @@ export type LogicDescriptorFactory = (options: {[opt: string]: any}) => Logic;
 
 interface SubLogic {
     actionCreators: Hashmap<ActionCreator>;
-    selectors: Hashmap<AnySelector>;
+    // selectors: Hashmap<AnySelector>;
 }
 
 export type LogicFactory = (name: string) => Logic;
@@ -46,16 +46,18 @@ export interface Logic {
     readonly actions: Hashmap<string>;
     readonly watchers: ActionWatcher[];
     readonly reducer: Reducer;
-    readonly logics: Hashmap<SubLogic>;
+    readonly selectors: Hashmap<AnySelector>;
+    readonly actionCreators: Hashmap<Hashmap<ActionCreator>>;
+    // readonly logics: Hashmap<SubLogic>;
 }
 
 export interface LogicParsingResult {
     actionTypes: string[];
     selectorCreators: Hashmap<SelectorCreator>;
-    actionCreators: Hashmap<ActionCreator>;
+    actionCreators: Hashmap<Hashmap<ActionCreator>>;
     watcherCreators: WatcherCreator[];
     reducer: Reducer;
-    logics: Hashmap<SubLogic>;
+    // logics: Hashmap<SubLogic>;
 }
 
 export function createLogic(descriptor: LogicDescriptor|((o: any) => LogicDescriptor), options: Hashmap<any> = {}) {
@@ -64,14 +66,11 @@ export function createLogic(descriptor: LogicDescriptor|((o: any) => LogicDescri
         if (logic && logic.name === name) { return logic; }
         descriptor = (typeof descriptor === "function") ? descriptor(options) : descriptor;
         const {reducer, ...result} = parseLogicDescriptor(descriptor, name);
-        const logics = result.logics;
-        logics[name] = {
-            actionCreators: result.actionCreators,
-            selectors: makeSelectors(result.selectorCreators),
-        };
+        const actionCreators = result.actionCreators;
+        const selectors = makeSelectors(result.selectorCreators);
         const actions = result.actionTypes.reduce((o: any, type: string) => { o[type] = type; return o; }, {});
         const watchers = result.watcherCreators.map((wc: WatcherCreator) => wc(actions));
-        logic = { name, actions, watchers, reducer, logics };
+        logic = { name, actions, watchers, reducer, selectors, actionCreators };
         return logic;
     };
 }
@@ -79,7 +78,7 @@ export function createLogic(descriptor: LogicDescriptor|((o: any) => LogicDescri
 function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"): LogicParsingResult {
     if (rootPath === "") { throw new Error("rootPath cannot be empty"); }
     const result: any = {}; // TODO define result type
-    const logicName = rootPath.split(".").pop() as string;
+    // const logicName = rootPath.split(".").pop() as string;
     const logicBase: LogicDescriptor = logic.logic || {};
     // define initial state
     const initialState: any = logic.state || logicBase.state;
@@ -95,13 +94,13 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
         Object.assign(selectorCreators, parseSelectors(selectors, rootPath));
     }
     // parse "actions entry"
-    const actionCreators: Hashmap<ActionCreator> = {};
+    const actionCreators: Hashmap<Hashmap<ActionCreator>> = {};
     const watcherCreators: WatcherCreator[] = [];
     const reducers: Hashmap<any> = {};
     if (logic.actions || logicBase.actions) {
         const actions = Object.assign({}, logicBase.actions, logic.actions);
         const res = parseActions(actions, rootPath);
-        Object.assign(actionCreators, res.actionCreators);
+        Object.assign(actionCreators, {[rootPath]: res.actionCreators});
         watcherCreators.push(...res.watcherCreators);
         res.actionTypes.forEach((type: string) => {
             if (!actionTypes.includes(type)) { actionTypes.push(type); }
@@ -111,7 +110,6 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
         }
     }
     // parse sub logics
-    const logics: Hashmap<any> = {};
     Object.keys(logic).forEach((key: string) => {
         if (key[0] !== "_") { return; }
         if (isArray(logic[key]) || !isObject(logic[key])) {
@@ -123,33 +121,23 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
         if (key.match("^__")) {
             // defining a sub-namespace;
             const subName = key.substr(2);
-            const subRootPath = rootPath + "." + subName;
-            const subResult = parseLogicDescriptor(logic[key], subRootPath);
+            const logicPath = rootPath + "." + subName;
+            const subResult = parseLogicDescriptor(logic[key], logicPath);
             subResult.actionTypes.forEach((type: string) => {
                 if (!actionTypes.includes(type)) { actionTypes.push(type); }
             });
             watcherCreators.push(...subResult.watcherCreators);
-            if (subResult.reducer) {
-                reducers[subName] = subResult.reducer;
-            }
-            const subLogics = {
-                [subRootPath]: {
-                    actionCreators: subResult.actionCreators,
-                    selectors: makeSelectors(subResult.selectorCreators),
-                },
-                ...subResult.logics,
-            };
-            Object.assign(logics, subLogics);
-            // add selector for sublogic in current logic FIXME
-            Object.keys(subLogics).forEach((logicPath: string) => {
-                const subSelectorCreators = subResult.selectorCreators;
-                Object.keys(subSelectorCreators).forEach((subPath) => {
-                    const subSelectorCreator = subSelectorCreators[subPath];
-                    const p = key + "." + subPath;
-                    selectorCreators[p] = subSelectorCreator;
-                });
+            if (subResult.reducer) { reducers[subName] = subResult.reducer; }
+            // add selector for sublogic in current logic
+            const subSelectorCreators = subResult.selectorCreators;
+            Object.keys(subSelectorCreators).forEach((subPath) => {
+                const subSelectorCreator = subSelectorCreators[subPath];
+                const p = subName + "." + subPath;
+                selectorCreators[p] = subSelectorCreator;
             });
-        } else {
+            // put action creators is sub-namespace
+            Object.assign(actionCreators, subResult.actionCreators);
+    } else {
             // defining a sub-state;
             const subName = key.substr(1);
             const subLogic = logic[key];
@@ -158,14 +146,14 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
             subResult.actionTypes.forEach((type: string) => {
                 if (!actionTypes.includes(type)) { actionTypes.push(type); }
             });
-            Object.keys(subResult.actionCreators).forEach((subPath) => {
-                const actionCreator = subResult.actionCreators[subPath];
-                actionCreators[subName + "." + subPath] = actionCreator;
-            });
+            watcherCreators.push(...subResult.watcherCreators);
+            if (subResult.reducer) { reducers[subName] = subResult.reducer; }
+            // add selector for sublogic in current logic
             const subSelectorCreators = subResult.selectorCreators;
             const subState = subLogic.state || subLogic.logic && subLogic.logic.state;
             const prvt = subLogic.private || subLogic.logic && subLogic.logic.private;
             if (subState && !prvt && Object.keys(subSelectorCreators).length === 0) {
+                // make selector creator for the whole state if no selectors are defined
                 selectorCreators[subName] = makeSelectorCreator("@state", rootPath + "." + subName);
             } else {
                 Object.keys(subSelectorCreators).forEach((subPath) => {
@@ -173,11 +161,14 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
                     selectorCreators[subName + "." + subPath] = selectorCreator;
                 });
             }
-            watcherCreators.push(...subResult.watcherCreators);
-            if (subResult.reducer) { reducers[subName] = subResult.reducer; }
+            // merge action creators
+            const subActionCreators = subResult.actionCreators[logicPath];
+            Object.keys(subActionCreators).reduce((o: any, k: string) => {
+                o[subName + "." + k] = subActionCreators[k];
+                return o;
+            }, actionCreators[rootPath]);
         }
     });
-
     if (Object.keys(reducers).length > 0) {
         result.reducer =  combineReducers(reducers);
     }
@@ -185,7 +176,6 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
     result.actionCreators = actionCreators;
     result.selectorCreators = selectorCreators;
     result.watcherCreators = watcherCreators;
-    result.logics = logics;
     return result as LogicParsingResult;
 }
 
@@ -202,36 +192,61 @@ function makeReducer(handlers: Hashmap<any>, initialState: any) {
 }
 
 export function makeGetProps(logic: Logic, store: LogicsStore) {
-    const propsAndActions: any = Object.keys(logic.logics).reduce((o: Hashmap<any>, path: string) => {
-        const currentLogic: SubLogic = logic.logics[path];
-        o[path] = {
-            actions: makeActions(currentLogic.actionCreators, store.dispatch, logic.actions),
-            mapStateToProps: (s: any) => makePropsFromSelectors(currentLogic.selectors, s),
-        };
-        return o;
-    }, {});
-    return (props: Hashmap<any> = {}) => {
-        const newProps: Hashmap<any> = {...props};
-        const state = store.getState();
-        Object.keys(propsAndActions).forEach((path: string) => {
-            const {actions, mapStateToProps} = propsAndActions[path];
-            const pathArray = path.split(".").slice(1);
-            const len = pathArray.length;
-            if (len === 0) {
-                Object.assign(newProps, {...mapStateToProps(state), actions});
-            } else {
-                let pointer = newProps;
-                for (let i = 0; i < len; i++) {
-                    const part = pathArray[i];
-                    if (i === len - 1 || len === 0) {
-                        pointer[part] = {...mapStateToProps(state), actions};
-                    } else {
-                        pointer[part] = pointer[part] || {};
-                        pointer = pointer[part];
-                    }
-                }
-            }
+    const logicActions: any = {};
+    Object.keys(logic.actionCreators).forEach((logicPath: string) => {
+        const actions = logic.actionCreators[logicPath];
+        if (!actions) { return; }
+        const actionTree = {};
+        Object.keys(actions).forEach((actionPath) => {
+            const dispatch = (...args: any[]) => store.dispatch(actions[actionPath](...args));
+            return setPath(actionTree, "actions." + actionPath, dispatch);
         });
-        return newProps;
+        const subPath = logicPath.split(".").slice(1);
+        if (subPath.length === 0) {
+            Object.assign(logicActions, actionTree);
+        } else {
+            setPath(logicActions, subPath, actionTree);
+        }
+    });
+    return (props: Hashmap<any> = {}) => {
+        const state = store.getState();
+        const logicProps: Hashmap<any> = {...props, ...makePropsFromSelectors(logic.selectors, state)};
+        return deepMerge(logicProps, logicActions);
     };
+}
+
+function deepMerge(o1: any, o2: any) {
+    const o = {...o1};
+    Object.keys(o2).forEach((k) => {
+        const value = o2[k];
+        if (isPlainObjet(o2[k])) {
+            o[k] = isPlainObjet(o[k]) ? o[k] : {};
+            o[k] = deepMerge(o[k], o2[k]);
+        } else {
+            o[k] = o2[k];
+        }
+    });
+    return o;
+}
+
+const isPlainObjet = (o: any) => (typeof o === "object" && o !== null && !Array.isArray(o));
+
+function setPath(o: Hashmap<any>, path: string|string[], value: any) {
+    let pointer = o;
+    const pathParts = Array.isArray(path) ? path : path.split(".");
+    const depth = pathParts.length - 1;
+    pathParts.forEach((part, idx) => {
+        if (idx === depth ) {
+            pointer[part] = value;
+        } else {
+            pointer[part] = pointer[part] || {};
+            pointer = pointer[part];
+        }
+    });
+    return o;
+}
+
+function getPath(o: Hashmap<any>, path: string|string[]) {
+    const pathParts = Array.isArray(path) ? path : path.split(".");
+    return pathParts.reduce((ptr, k) => ptr[k], o);
 }

@@ -1,12 +1,13 @@
 {
   "name": "logics",
-  "version": "0.4.0",
+  "version": "0.5.1",
   "description": "state management made easy",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [
     "lib/**/*.js",
     "lib/**/*.d.ts",
+    "effects",
     "react"
   ],
   "scripts": {

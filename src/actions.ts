@@ -58,8 +58,9 @@ export function parseActions(actions: Hashmap<any>, rootPath: string) {
                     throw new Error(`invalid logic: wrong action path "${actionPath}"`);
                 }
                 // defining action type from path
-                const shift = actionPath.split(".").length - 1;
-                type = makeActionType(...rootPath.split(".").slice(0, -shift), actionPath);
+                // const shift = actionPath.split(".").length - 1;
+                // type = makeActionType(...rootPath.split(".").slice(0, -shift), actionPath);
+                type = makeActionType(...rootPath.split(".").slice(0, 1), actionPath);
             } else {
                 // key is directly an action type;
                 type = key;
@@ -145,7 +146,7 @@ function makeWatcherCreator(type: string, take: string|WatcherTaker, handler: Ge
             yield takeLatest(type, handler, actions);
         };
     } else {
-        throw new Error("invalid logic: wrong \"take\" value");
+        throw new Error(`invalid logic: wrong \"take\" value for action type "${type}"`);
     }
 }
 

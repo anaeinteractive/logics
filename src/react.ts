@@ -3,7 +3,6 @@ import {Unsubscribe} from "redux";
 import {getStore} from ".";
 import {createLogic, LogicDescriptor} from "./logic";
 import {LogicRegistryEntry, LogicsStore} from "./store";
-
 interface ConnectedProps { getContext: (() => Context<any>); children?: ReactNode; props?: any[]; }
 export function connect(logicPath: ((props: any) => string)|string = "") {
     return (ConnectedComponent: ComponentClass|StatelessComponent) => {

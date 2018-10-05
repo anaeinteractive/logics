@@ -1,0 +1,5 @@
+{
+    "name": "logics-effects",
+    "main": "../lib/effects.js",
+    "types": "../lib/effects.d.ts"
+}
