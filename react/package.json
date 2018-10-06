@@ -1,5 +1,6 @@
 {
-    "name": "logics-react",
+    "name": "logics/react",
+    "private": true,
     "main": "../lib/react.js",
     "types": "../lib/react.d.ts"
 }

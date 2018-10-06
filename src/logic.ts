@@ -6,9 +6,11 @@ import {
     HandlerCreatorCombo,
     makeActions,
     parseActions,
+    parseHandlers,
     PayloadCreator,
     WatcherCreator,
 } from "./actions";
+import {isPlainObject, setPath} from "./helpers";
 import {
     AnySelector,
     makePropsFromSelectors,
@@ -66,9 +68,10 @@ export function createLogic(descriptor: LogicDescriptor|((o: any) => LogicDescri
         if (logic && logic.name === name) { return logic; }
         descriptor = (typeof descriptor === "function") ? descriptor(options) : descriptor;
         const {reducer, ...result} = parseLogicDescriptor(descriptor, name);
-        const actionCreators = result.actionCreators;
         const selectors = makeSelectors(result.selectorCreators);
-        const actions = result.actionTypes.reduce((o: any, type: string) => { o[type] = type; return o; }, {});
+        const actionCreators = result.actionCreators;
+        const actionTypes = result.actionTypes.reduce((o: any, type: string) => { o[type] = type; return o; }, {});
+        const actions = makeActions(actionCreators, actionTypes);
         const watchers = result.watcherCreators.map((wc: WatcherCreator) => wc(actions));
         logic = { name, actions, watchers, reducer, selectors, actionCreators };
         return logic;
@@ -93,21 +96,36 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
         const selectors = Object.assign({}, logicBase.selectors, logic.selectors);
         Object.assign(selectorCreators, parseSelectors(selectors, rootPath));
     }
-    // parse "actions entry"
+    const reducers: Hashmap<any> = {};
     const actionCreators: Hashmap<Hashmap<ActionCreator>> = {};
     const watcherCreators: WatcherCreator[] = [];
-    const reducers: Hashmap<any> = {};
+    const reducerHandlers: Hashmap<Reducer> = {};
+    // parse "actions entry"
     if (logic.actions || logicBase.actions) {
         const actions = Object.assign({}, logicBase.actions, logic.actions);
         const res = parseActions(actions, rootPath);
         Object.assign(actionCreators, {[rootPath]: res.actionCreators});
+        Object.assign(reducerHandlers, res.reducerHandlers);
         watcherCreators.push(...res.watcherCreators);
         res.actionTypes.forEach((type: string) => {
             if (!actionTypes.includes(type)) { actionTypes.push(type); }
         });
-        if (Object.keys(res.reducerHandlers).length > 0) {
-            result.reducer = makeReducer(res.reducerHandlers, initialState);
-        }
+        // if (Object.keys(res.reducerHandlers).length > 0) {
+        //     result.reducer = makeReducer(res.reducerHandlers, initialState);
+        // }
+    }
+    // parse "handlers entry"
+    if (logic.handlers || logicBase.handlers) {
+        const handlers = Object.assign({}, logicBase.handlers, logic.handlers);
+        const res = parseHandlers(handlers, rootPath);
+        Object.assign(reducerHandlers, res.reducerHandlers);
+        watcherCreators.push(...res.watcherCreators);
+        res.actionTypes.forEach((type: string) => {
+            if (!actionTypes.includes(type)) { actionTypes.push(type); }
+        });
+    }
+    if (Object.keys(reducerHandlers).length > 0) {
+        result.reducer = makeReducer(reducerHandlers, initialState);
     }
     // parse sub logics
     Object.keys(logic).forEach((key: string) => {
@@ -219,34 +237,12 @@ function deepMerge(o1: any, o2: any) {
     const o = {...o1};
     Object.keys(o2).forEach((k) => {
         const value = o2[k];
-        if (isPlainObjet(o2[k])) {
-            o[k] = isPlainObjet(o[k]) ? o[k] : {};
+        if (isPlainObject(o2[k])) {
+            o[k] = isPlainObject(o[k]) ? o[k] : {};
             o[k] = deepMerge(o[k], o2[k]);
         } else {
             o[k] = o2[k];
         }
     });
     return o;
-}
-
-const isPlainObjet = (o: any) => (typeof o === "object" && o !== null && !Array.isArray(o));
-
-function setPath(o: Hashmap<any>, path: string|string[], value: any) {
-    let pointer = o;
-    const pathParts = Array.isArray(path) ? path : path.split(".");
-    const depth = pathParts.length - 1;
-    pathParts.forEach((part, idx) => {
-        if (idx === depth ) {
-            pointer[part] = value;
-        } else {
-            pointer[part] = pointer[part] || {};
-            pointer = pointer[part];
-        }
-    });
-    return o;
-}
-
-function getPath(o: Hashmap<any>, path: string|string[]) {
-    const pathParts = Array.isArray(path) ? path : path.split(".");
-    return pathParts.reduce((ptr, k) => ptr[k], o);
 }

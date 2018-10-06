@@ -1,6 +1,7 @@
 import {AnyAction, Dispatch} from "redux";
 import {ForkEffect, takeEvery, takeLatest} from "redux-saga/effects";
 import {isArray, isFunction, isObject} from "util";
+import {getPath, setPath} from "./helpers";
 import {Hashmap} from "./types";
 
 export function parseActions(actions: Hashmap<any>, rootPath: string) {
@@ -8,88 +9,92 @@ export function parseActions(actions: Hashmap<any>, rootPath: string) {
     const reducerHandlers: Hashmap<ReducerHandler> = {};
     const watcherCreators: any[] = [];
     const actionTypes: string[] = [];
-    Object.keys(actions).forEach((key) => {
-        if (key.match("^[.]{3}[^.]*$")) {
-            // key is an action name
-            const actionName = key.substr(3);
-            if (!actionName.match("^[a-zA-Z_]*$")) {
-                throw new Error(`invalid logic: "${actionName}" is not a valid action name`);
+    Object.keys(actions).forEach((actionName) => {
+        if (!actionName.match("^[a-zA-Z_]*$")) {
+            throw new Error(`invalid logic: "${actionName}" is not a valid action name`);
+        }
+        if (isObject(actions[actionName]) && !isArray(actions[actionName])) {
+            // defining combo (action creator + handler)
+            const combo = actions[actionName] as HandlerCreatorCombo;
+            // defining action creator
+            const type: string = makeActionType(rootPath, actionName);
+            const result = parseCombo(combo, type, actionName);
+            if (result.actionCreator) {
+                actionCreators[actionName] = result.actionCreator;
             }
-            if (isObject(actions[key]) && !isArray(actions[key])) {
-                // defining combo (action creator + handler)
-                const combo = actions[key] as HandlerCreatorCombo;
-                // defining action creator
-                const type: string = makeActionType(rootPath, actionName);
-                const result = parseCombo(combo, type, actionName);
-                if (result.actionCreator) {
-                    actionCreators[actionName] = result.actionCreator;
-                }
-                if (result.reducerHandler) {
-                    reducerHandlers[type] = result.reducerHandler;
-                }
-                if (result.watcherCreator) {
-                    watcherCreators.push(result.watcherCreator);
-                }
-                if (!actionTypes.includes(type)) { actionTypes.push(type); }
-            } else if (isFunction(actions[key])) {
-                // defining a handler for the reducer;
-                const type = makeActionType(...rootPath.split("."), actionName);
-                reducerHandlers[type] = actions[key] as ReducerHandler;
-                if (!actionTypes.includes(type)) { actionTypes.push(type); }
-            } else if (isArray(actions[key])) {
-                // defining an action creator
-                const [actionType, payloadCreator] = actions[key] as [string, PayloadCreator];
-                const actionCreator = makeActionCreator(actionType, payloadCreator);
-                actionCreators[actionName] = actionCreator;
-            } else if (typeof actions[key] === "string") {
-                // defining an action creator alias
-                // TODO
-                console.warn("action creator alias not yet implemented");
-            } else {
-                throw new Error(`invalid logic: actions entry cannot be a ${typeof actions[key]}`);
+            if (result.reducerHandler) {
+                reducerHandlers[type] = result.reducerHandler;
             }
-        } else {
-            // defining a handler
-            let type: string;
-            if (key.match("^[.]{3}")) {
-                // defining type from action path
-                const actionPath = key.substr(3);
-                if (!actionPath.match("[a-zA-Z_[.]]*")) {
-                    throw new Error(`invalid logic: wrong action path "${actionPath}"`);
-                }
-                // defining action type from path
-                // const shift = actionPath.split(".").length - 1;
-                // type = makeActionType(...rootPath.split(".").slice(0, -shift), actionPath);
-                type = makeActionType(...rootPath.split(".").slice(0, 1), actionPath);
-            } else {
-                // key is directly an action type;
-                type = key;
-            }
-            if (typeof actions[key] === "function") {
-                // defining reducer handler
-                const handler = actions[key] as ReducerHandler;
-                reducerHandlers[type] = handler;
-            } else if (isObject(actions[key]) && !isArray(actions[key])) {
-                // defining watcher or reducer handler
-                const combo = actions[key] as HandlerCreatorCombo;
-                // cannot define an action creator here
-                if (combo.payload !== undefined) {
-                    throw new Error(`invalid logic: "${key}" is not a valid action name`);
-                }
-                const result = parseCombo(combo, type);
-                if (result.reducerHandler) {
-                    reducerHandlers[type] = result.reducerHandler;
-                }
-                if (result.watcherCreator) {
-                    watcherCreators.push(result.watcherCreator);
-                }
-            } else {
-                throw new Error(`invalid logic: handler for "${key} must a be either a function or an object`);
+            if (result.watcherCreator) {
+                watcherCreators.push(result.watcherCreator);
             }
             if (!actionTypes.includes(type)) { actionTypes.push(type); }
+        } else if (isFunction(actions[actionName])) {
+            // defining a handler for the reducer;
+            const type = makeActionType(...rootPath.split("."), actionName);
+            reducerHandlers[type] = actions[actionName] as ReducerHandler;
+            if (!actionTypes.includes(type)) { actionTypes.push(type); }
+        } else if (isArray(actions[actionName])) {
+            // defining an action creator
+            const [actionType, payloadCreator] = actions[actionName] as [string, PayloadCreator];
+            const actionCreator = makeActionCreator(actionType, payloadCreator);
+            actionCreators[actionName] = actionCreator;
+        } else if (typeof actions[actionName] === "string") {
+            // defining an action creator alias
+            // TODO
+            console.warn("action creator alias not yet implemented");
+        } else {
+            throw new Error(`invalid logic: actions entry cannot be a ${typeof actions[actionName]}`);
         }
     });
     return {actionCreators, reducerHandlers, watcherCreators, actionTypes};
+}
+
+export function parseHandlers(handlers: Hashmap<any>, rootPath: string) {
+    const reducerHandlers: Hashmap<ReducerHandler> = {};
+    const watcherCreators: any[] = [];
+    const actionTypes: string[] = [];
+    Object.keys(handlers).forEach((key) => {
+        // defining a handler
+        let type: string;
+        if (key.match("^[.]{3}")) {
+            // defining type from action path
+            const actionPath = key.substr(3);
+            if (!actionPath.match("[a-zA-Z_[.]]*")) {
+                throw new Error(`invalid logic: invalid action path "${actionPath}"`);
+            }
+            // defining action type from path
+            // const shift = actionPath.split(".").length - 1;
+            // type = makeActionType(...rootPath.split(".").slice(0, -shift), actionPath);
+            type = makeActionType(...rootPath.split(".").slice(0, 1), actionPath);
+        } else {
+            // key is directly an action type;
+            type = key;
+            if (!actionTypes.includes(type)) { actionTypes.push(type); }
+        }
+        if (typeof handlers[key] === "function") {
+            // defining reducer handler
+            const handler = handlers[key] as ReducerHandler;
+            reducerHandlers[type] = handler;
+        } else if (isObject(handlers[key]) && !isArray(handlers[key])) {
+            // defining watcher or reducer handler
+            const combo = handlers[key] as HandlerCreatorCombo;
+            // cannot define an action creator here
+            if (combo.payload !== undefined) {
+                throw new Error(`invalid logic: "${key}" cannot define an action creator`);
+            }
+            const result = parseCombo(combo, type);
+            if (result.reducerHandler) {
+                reducerHandlers[type] = result.reducerHandler;
+            }
+            if (result.watcherCreator) {
+                watcherCreators.push(result.watcherCreator);
+            }
+        } else {
+            throw new Error(`invalid logic: handler for "${key} must a be either a function or an object`);
+        }
+    });
+    return {reducerHandlers, watcherCreators, actionTypes};
 }
 
 type WatcherTaker = (type: string, actions: any) => () => IterableIterator<ForkEffect>;
@@ -179,25 +184,21 @@ export function makeActionType(...args: string[]) {
     return args.join(".").split(".").join("__").toUpperCase();
 }
 
-export function makeActions(actionCreators: Hashmap<any>, dispatch: Dispatch, actionTypes?: Hashmap<string>) {
+export function makeActions(actionCreators: Hashmap<any>, actionTypes?: Hashmap<string>) {
     const actions: any = {};
-    Object.keys(actionCreators).forEach((path: string) => {
-        const create = actionCreators[path];
-        const pathArray = path.split(".");
-        const len = pathArray.length;
-        let pointer = actions;
-        for (let i = 0; i < len; i++) {
-            const part = pathArray[i];
-            if (i === len - 1) {
-                if (actionTypes && !actionTypes[create.toString()]) {
-                    throw new Error(`"${create.toString()}" is not a valid action type`);
-                }
-                pointer[part] = (...args: any[]) => dispatch(create(...args));
-            } else {
-                pointer[part] = pointer[part] || {};
-                pointer = pointer[part];
+    Object.keys(actionCreators).forEach((logicPath: string) => {
+        const logicActionCreators = actionCreators[logicPath];
+        Object.keys(logicActionCreators).forEach((actionPath: string) => {
+            const fullPath = logicPath.split(".").slice(1).concat(actionPath.split("."));
+            const createAction = logicActionCreators[actionPath];
+            if (actionTypes && !actionTypes[createAction.toString()]) {
+                throw new Error(`"${createAction.toString()}" is not a valid action type`);
             }
-        }
+            setPath(actions, fullPath, logicActionCreators[actionPath]);
+        });
     });
+    if (actionTypes) {
+        actions._types = actionTypes;
+    }
     return actions;
 }

@@ -1,7 +1,7 @@
 {
   "name": "logics",
-  "version": "0.5.1",
-  "description": "state management made easy",
+  "version": "0.6.0",
+  "description": "state management and UI logic made easy",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "files": [

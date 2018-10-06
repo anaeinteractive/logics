@@ -16,14 +16,14 @@ export function parseSelectors(selectors: Hashmap<any>, rootPath: string) {
     return selectorCreators;
 }
 
-export function makeSelectorCreator(arg: any, rootPath: string): SelectorCreator {
+type statePicker = (localState: any, state: any, rootPath: string) => ((state: any) => any);
+export function makeSelectorCreator(arg: string|string[]|statePicker, rootPath: string): SelectorCreator {
     if (typeof arg === "string") {
         const pathArray = arg.split(".");
         const fullPath = rootPath.split(".").concat(pathArray.slice(pathArray[0] === "@state" ? 1 : 0));
         return () => (state: any) => fullPath.reduce((o: any, k: string) =>  o[k], state);
     } else if (isArray(arg)) {
         const len = arg.length;
-        const fn: (...args: any[]) => any = arg.slice(-1)[0];
         return (getSelector: GetByKey<AnySelector>) => {
             const args: any[] = arg.map((part: any, i: number) => {
                 if (i < len - 1) { return getSelector(part); }
