@@ -113,9 +113,15 @@ export default = {
 ### Using Logics With React
 
 ```jsx
+// /components/LogicProvider.js
+import {createLogicProvider} from "logics/react";
+export default createLogicProvider();
+```
+
+```jsx
 // /components/counter.jsx
 import React from "react";
-import {connect} from "logics/react";
+import {LogicProvider} from "./LogicProvider";
 
 const Counter = ({count, step, actions}) => {
     const increment = () => actions.increment(step);
@@ -136,39 +142,37 @@ const Counter = ({count, step, actions}) => {
     );
 };
 
-export default connect("counter")(Counter);
+export default LogicProvider.connect("counter")(Counter);
 ```
 
 ```jsx
 // /components/display.jsx
 import React from "react";
-import {connect} from "logics/react";
+import {LogicProvider} from "./LogicProvider";
 
 export Display = ({message, status}) => (
     <div class="status">{message}</div>
 );
 
-export defaut connect("display")(Display);
+export defaut LogicProvider.connect("display")(Display);
 ```
 
 ```jsx
 // /app.jsx
 import React from "react";
 import ReactDOM from "react-dom";
-import {createLogicProvider} from "logics/react";
+import {LogicProvider} from "./LogicProvider";
 import Counter from "./components/counter";
 import Display from "./components/display";
 import mainLogic from "./logics/main";
-
-const LogicProvider = createLogicProvider();
 
 const App = () => {
     const {getContext} = LogicProvider;
     return (
         <LogicProvider logic={mainLogic} name="app">
-            <Display getContext={getContext} />
+            <Display />
             <br/>
-            <Counter getContext={getContext} />
+            <Counter />
         </LogicProvider>
     );
 };

@@ -1,42 +1,44 @@
-import {ComponentClass, ComponentElement, Context, default as React, ReactNode, StatelessComponent} from "react";
+import {
+    ComponentClass,
+    ComponentElement,
+    Context,
+    default as React,
+    ReactElement,
+    ReactNode,
+    StatelessComponent,
+} from "react";
 import {Unsubscribe} from "redux";
 import {getStore} from ".";
 import {createLogic, LogicDescriptor} from "./logic";
 import {LogicRegistryEntry, LogicsStore} from "./store";
-interface ConnectedProps { getContext: (() => Context<any>); children?: ReactNode; props?: any[]; }
-export function connect(logicPath: ((props: any) => string)|string = "") {
-    return (ConnectedComponent: ComponentClass|StatelessComponent) => {
-        return ({getContext, children, ...props}: ConnectedProps) => {
-            const {Consumer} = getContext();
-            const propsPath: string = typeof logicPath === "function" ? logicPath(props) : logicPath;
-            return React.createElement(Consumer, null, (logicProps: any) => {
-                const localProps = propsPath.split(".").reduce((o, k) => o[k], logicProps) || logicProps;
-                return React.createElement(ConnectedComponent, {...props, ...localProps}, children);
-            });
-        };
-    };
-}
 
 interface LogicProviderProps {
+    store?: LogicsStore;
     logic: LogicDescriptor|((options: any) => LogicDescriptor);
     name?: string;
-    children?: ReactNode;
+    children?: ReactNode[];
 }
 
 interface ILogicProvider {
     (props: LogicProviderProps): ComponentElement<LogicsWrapperProps, LogicsWrapper>;
-    // connect: (logicPath: string) => ((C: Component) => Component);
-    getContext: () => Context<any>;
+    connect: (logicPath?: ((props: any) => string)|string) => (
+        ConnectedComponent: ComponentClass|StatelessComponent) => (
+        props: any) => ReactElement<any>;
 }
 
-export function createLogicProvider(store: LogicsStore = getStore()): ILogicProvider {
+export function createLogicProvider(): ILogicProvider {
     const cache: {
         descriptor?: LogicDescriptor;
         name?: string;
         entry?: LogicRegistryEntry;
     } = {};
     let context: Context<any>;
-    const LogicProvider = ({logic: logicDesc, name, children}: LogicProviderProps) => {
+    const LogicProvider = ({
+        store = getStore(),
+        logic: logicDesc,
+        name,
+        children,
+    }: LogicProviderProps) => {
         if (!name) {
             throw new Error("connot provide logic without a name");
         }
@@ -58,7 +60,18 @@ export function createLogicProvider(store: LogicsStore = getStore()): ILogicProv
         context = React.createContext(getProps());
         return React.createElement(LogicsWrapper, {subscribe, dropLogic, getProps, context}, children);
     };
-    (LogicProvider as ILogicProvider).getContext = () => context;
+    (LogicProvider as ILogicProvider).connect = (logicPath: ((props: any) => string)|string = "") => {
+        return (ConnectedComponent: ComponentClass|StatelessComponent) => {
+            return ({children, ...props}: { children?: ReactNode; props?: any; }) => {
+                const {Consumer} = context;
+                const propsPath: string = typeof logicPath === "function" ? logicPath(props) : logicPath;
+                return React.createElement(Consumer, null, (logicProps: any) => {
+                    const localProps = propsPath.split(".").reduce((o, k) => o[k], logicProps) || logicProps;
+                    return React.createElement(ConnectedComponent, {...props, ...localProps}, children);
+                });
+            };
+        };
+    };
     return LogicProvider as ILogicProvider;
 }
 
@@ -67,7 +80,7 @@ interface LogicsWrapperProps {
     dropLogic: () => void;
     getProps: () => any;
     context: Context<any>;
-    children?: ReactNode;
+    children?: ReactNode[];
 }
 
 class LogicsWrapper extends React.Component<LogicsWrapperProps> {
