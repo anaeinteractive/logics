@@ -96,7 +96,6 @@ function createLogicRegistry(store: LogicsStore, runSaga: ((saga: any) => any)) 
 
 export function createStore(config: StoreConfig = {}): LogicsStore {
     const initialState = config.state || {};
-
     const middlewares = config.middlewares || [];
     const sagaMiddleware = createSagaMiddleware();
     middlewares.push(sagaMiddleware);
@@ -108,6 +107,8 @@ export function createStore(config: StoreConfig = {}): LogicsStore {
 
     const store = createReduxStore(rootReducer, initialState, storeEnhancer) as LogicsStore;
 
+    if (config.reducers) { store.injectReducers(config.reducers); }
+
     const logicRegistry = createLogicRegistry(store, sagaMiddleware.run);
 
     store.registerLogic = logicRegistry.register;
@@ -116,28 +117,3 @@ export function createStore(config: StoreConfig = {}): LogicsStore {
 
     return store;
 }
-
-// export function createSimpleStore(reducer: any) {
-//     let state: any = reducer(undefined, {type: "@@INIT"});
-//     let dispatching = false;
-//     const listeners: any[] = [];
-//     return {
-//         dispatch(action: any) {
-//             if (dispatching) { throw new Error("cannot dispatch in a reducer"); }
-//             dispatching = true;
-//             state = reducer(state, action);
-//             listeners.forEach((listener: any) => listener());
-//             dispatching = false;
-//         },
-//         getState() {
-//             return state;
-//         },
-//         subscribe(listener: any) {
-//             listeners.push(listener);
-//             return () => {
-//                 const index: number = listeners.indexOf(listener);
-//                 if (index >= 0) { listeners.splice(index, 1); }
-//             };
-//         },
-//     };
-// }
