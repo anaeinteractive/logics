@@ -81,7 +81,6 @@ export function createLogic(descriptor: LogicDescriptor|((o: any) => LogicDescri
 function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"): LogicParsingResult {
     if (rootPath === "") { throw new Error("rootPath cannot be empty"); }
     const result: any = {}; // TODO define result type
-    // const logicName = rootPath.split(".").pop() as string;
     const logicBase: LogicDescriptor = logic.logic || {};
     // define initial state
     const initialState: any = logic.state || logicBase.state;
@@ -95,6 +94,12 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
     if (logic.selectors || logicBase.selectors) {
         const selectors = Object.assign({}, logicBase.selectors, logic.selectors);
         Object.assign(selectorCreators, parseSelectors(selectors, rootPath));
+    } else {
+        // make selector creator for the whole state if no selectors are defined
+        if (logic.state && !(logic.private || logic.logic && logic.logic.private)) {
+            // const logicName = rootPath.split(".").pop() as string;
+            selectorCreators["@state"] = makeSelectorCreator("@state", rootPath);
+        }
     }
     const reducers: Hashmap<any> = {};
     const actionCreators: Hashmap<Hashmap<ActionCreator>> = {};
@@ -155,7 +160,7 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
             });
             // put action creators is sub-namespace
             Object.assign(actionCreators, subResult.actionCreators);
-    } else {
+        } else {
             // defining a sub-state;
             const subName = key.substr(1);
             const subLogic = logic[key];
@@ -169,16 +174,24 @@ function parseLogicDescriptor(logic: LogicDescriptor, rootPath: string = "logic"
             // add selector for sublogic in current logic
             const subSelectorCreators = subResult.selectorCreators;
             const subState = subLogic.state || subLogic.logic && subLogic.logic.state;
-            const prvt = subLogic.private || subLogic.logic && subLogic.logic.private;
-            if (subState && !prvt && Object.keys(subSelectorCreators).length === 0) {
-                // make selector creator for the whole state if no selectors are defined
-                selectorCreators[subName] = makeSelectorCreator("@state", rootPath + "." + subName);
-            } else {
-                Object.keys(subSelectorCreators).forEach((subPath) => {
-                    const selectorCreator = subSelectorCreators[subPath];
+            // const prvt = subLogic.private || subLogic.logic && subLogic.logic.private;
+            // if (subState && !prvt && Object.keys(subSelectorCreators).length === 0) {
+            //     // make selector creator for the whole state if no selectors are defined
+            //     selectorCreators[subName] = makeSelectorCreator("@state", rootPath + "." + subName);
+            // } else {
+            //     Object.keys(subSelectorCreators).forEach((subPath) => {
+            //         const selectorCreator = subSelectorCreators[subPath];
+            //         selectorCreators[subName + "." + subPath] = selectorCreator;
+            //     });
+            // }
+            Object.keys(subSelectorCreators).forEach((subPath) => {
+                const selectorCreator = subSelectorCreators[subPath];
+                if (subPath === "@state") {
+                    selectorCreators[subName] = selectorCreator;
+                } else {
                     selectorCreators[subName + "." + subPath] = selectorCreator;
-                });
-            }
+                }
+            });
             // merge action creators
             const subActionCreators = subResult.actionCreators[logicPath];
             Object.keys(subActionCreators).reduce((o: any, k: string) => {

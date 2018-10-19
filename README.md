@@ -150,9 +150,12 @@ export default LogicProvider.connect("counter")(Counter);
 import React from "react";
 import {LogicProvider} from "./LogicProvider";
 
-export Display = ({message, status}) => (
-    <div class="status">{message}</div>
-);
+export Display = (props) => {
+    const {message, status} = props["@state"];
+    return (
+        <div class={status}>{message}</div>
+    );
+};
 
 export defaut LogicProvider.connect("display")(Display);
 ```
